@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 import logging
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant import config_entries
 from homeassistant.components import onboarding
@@ -16,19 +16,18 @@ if TYPE_CHECKING:
     import asyncio
 
     from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-    from homeassistant.components.dhcp import DhcpServiceInfo
-    from homeassistant.components.ssdp import SsdpServiceInfo
-    from homeassistant.components.zeroconf import ZeroconfServiceInfo
 
+    from .service_info.dhcp import DhcpServiceInfo
     from .service_info.mqtt import MqttServiceInfo
+    from .service_info.ssdp import SsdpServiceInfo
+    from .service_info.zeroconf import ZeroconfServiceInfo
 
-_R = TypeVar("_R", bound="Awaitable[bool] | bool")
-DiscoveryFunctionType = Callable[[HomeAssistant], _R]
+type DiscoveryFunctionType[_R] = Callable[[HomeAssistant], _R]
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class DiscoveryFlowHandler(config_entries.ConfigFlow, Generic[_R]):
+class DiscoveryFlowHandler[_R: Awaitable[bool] | bool](config_entries.ConfigFlow):
     """Handle a discovery config flow."""
 
     VERSION = 1

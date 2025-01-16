@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any
 
 from meteofrance_api.helpers import (
     get_warning_text_status_from_indice_color,
@@ -48,8 +48,6 @@ from .const import (
     MANUFACTURER,
     MODEL,
 )
-
-_DataT = TypeVar("_DataT", bound=Rain | Forecast | CurrentPhenomenons)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -189,7 +187,7 @@ async def async_setup_entry(
     """Set up the Meteo-France sensor platform."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator_forecast: DataUpdateCoordinator[Forecast] = data[COORDINATOR_FORECAST]
-    coordinator_rain: DataUpdateCoordinator[Rain] | None = data[COORDINATOR_RAIN]
+    coordinator_rain: DataUpdateCoordinator[Rain] | None = data.get(COORDINATOR_RAIN)
     coordinator_alert: DataUpdateCoordinator[CurrentPhenomenons] | None = data.get(
         COORDINATOR_ALERT
     )
@@ -226,7 +224,9 @@ async def async_setup_entry(
     async_add_entities(entities, False)
 
 
-class MeteoFranceSensor(CoordinatorEntity[DataUpdateCoordinator[_DataT]], SensorEntity):
+class MeteoFranceSensor[_DataT: Rain | Forecast | CurrentPhenomenons](
+    CoordinatorEntity[DataUpdateCoordinator[_DataT]], SensorEntity
+):
     """Representation of a Meteo-France sensor."""
 
     entity_description: MeteoFranceSensorEntityDescription

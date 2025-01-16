@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from pysensibo.model import MotionSensor, SensiboDevice
+from pysensibo.model import MotionSensor, PureAQI, SensiboDevice
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -15,7 +15,6 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     CONCENTRATION_PARTS_PER_BILLION,
@@ -30,11 +29,18 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
-from .const import DOMAIN
+from . import SensiboConfigEntry
 from .coordinator import SensiboDataUpdateCoordinator
 from .entity import SensiboDeviceBaseEntity, SensiboMotionBaseEntity
 
 PARALLEL_UPDATES = 0
+
+
+def _smart_type_name(_type: str | None) -> str | None:
+    """Return a lowercase name of smart type."""
+    if _type and _type == "feelsLike":
+        return "feelslike"
+    return _type
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -98,11 +104,11 @@ MOTION_SENSOR_TYPES: tuple[SensiboMotionSensorEntityDescription, ...] = (
 PURE_SENSOR_TYPES: tuple[SensiboDeviceSensorEntityDescription, ...] = (
     SensiboDeviceSensorEntityDescription(
         key="pm25",
-        device_class=SensorDeviceClass.PM25,
-        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: data.pm25,
+        translation_key="pm25_pure",
+        device_class=SensorDeviceClass.ENUM,
+        value_fn=lambda data: data.pm25_pure.name.lower() if data.pm25_pure else None,
         extra_fn=None,
+        options=[aqi.name.lower() for aqi in PureAQI],
     ),
     SensiboDeviceSensorEntityDescription(
         key="pure_sensitivity",
@@ -154,7 +160,7 @@ DEVICE_SENSOR_TYPES: tuple[SensiboDeviceSensorEntityDescription, ...] = (
     SensiboDeviceSensorEntityDescription(
         key="climate_react_type",
         translation_key="smart_type",
-        value_fn=lambda data: data.smart_type,
+        value_fn=lambda data: _smart_type_name(data.smart_type),
         extra_fn=None,
         entity_registry_enabled_default=False,
     ),
@@ -179,6 +185,7 @@ AIRQ_SENSOR_TYPES: tuple[SensiboDeviceSensorEntityDescription, ...] = (
         value_fn=lambda data: data.co2,
         extra_fn=None,
     ),
+    *DEVICE_SENSOR_TYPES,
 )
 
 ELEMENT_SENSOR_TYPES: tuple[SensiboDeviceSensorEntityDescription, ...] = (
@@ -231,31 +238,48 @@ DESCRIPTION_BY_MODELS = {
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: SensiboConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Sensibo sensor platform."""
 
-    coordinator: SensiboDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
 
-    entities: list[SensiboMotionSensor | SensiboDeviceSensor] = []
+    added_devices: set[str] = set()
 
-    for device_id, device_data in coordinator.data.parsed.items():
-        if device_data.motion_sensors:
+    def _add_remove_devices() -> None:
+        """Handle additions of devices and sensors."""
+
+        entities: list[SensiboMotionSensor | SensiboDeviceSensor] = []
+        nonlocal added_devices
+        new_devices, remove_devices, added_devices = coordinator.get_devices(
+            added_devices
+        )
+
+        if new_devices:
             entities.extend(
                 SensiboMotionSensor(
                     coordinator, device_id, sensor_id, sensor_data, description
                 )
+                for device_id, device_data in coordinator.data.parsed.items()
+                if device_data.motion_sensors
                 for sensor_id, sensor_data in device_data.motion_sensors.items()
+                if sensor_id in new_devices
                 for description in MOTION_SENSOR_TYPES
             )
-    entities.extend(
-        SensiboDeviceSensor(coordinator, device_id, description)
-        for device_id, device_data in coordinator.data.parsed.items()
-        for description in DESCRIPTION_BY_MODELS.get(
-            device_data.model, DEVICE_SENSOR_TYPES
-        )
-    )
-    async_add_entities(entities)
+            entities.extend(
+                SensiboDeviceSensor(coordinator, device_id, description)
+                for device_id, device_data in coordinator.data.parsed.items()
+                if device_id in new_devices
+                for description in DESCRIPTION_BY_MODELS.get(
+                    device_data.model, DEVICE_SENSOR_TYPES
+                )
+            )
+            async_add_entities(entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_add_remove_devices))
+    _add_remove_devices()
 
 
 class SensiboMotionSensor(SensiboMotionBaseEntity, SensorEntity):

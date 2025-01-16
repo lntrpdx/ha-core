@@ -148,9 +148,7 @@ class GitHubConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="could_not_register")
 
         if self.login_task is None:
-            self.login_task = self.hass.async_create_task(
-                _wait_for_login(), eager_start=False
-            )
+            self.login_task = self.hass.async_create_task(_wait_for_login())
 
         if self.login_task.done():
             if self.login_task.exception():
@@ -213,15 +211,11 @@ class GitHubConfigFlow(ConfigFlow, domain=DOMAIN):
         config_entry: ConfigEntry,
     ) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
 
 class OptionsFlowHandler(OptionsFlow):
     """Handle a option flow for GitHub."""
-
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self,

@@ -17,8 +17,8 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import SurePetcareDataCoordinator
 from .const import DOMAIN
+from .coordinator import SurePetcareDataCoordinator
 from .entity import SurePetcareEntity
 
 
@@ -135,8 +135,8 @@ class DeviceConnectivity(SurePetcareBinarySensor):
         self._attr_is_on = bool(state)
         if state:
             self._attr_extra_state_attributes = {
-                "device_rssi": f'{state["signal"]["device_rssi"]:.2f}',
-                "hub_rssi": f'{state["signal"]["hub_rssi"]:.2f}',
+                "device_rssi": f"{state['signal']['device_rssi']:.2f}",
+                "hub_rssi": f"{state['signal']['hub_rssi']:.2f}",
             }
         else:
             self._attr_extra_state_attributes = {}

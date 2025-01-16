@@ -90,7 +90,6 @@ class SwitchBeeClimateEntity(SwitchBeeDeviceEntity[SwitchBeeThermostat], Climate
 
     _attr_fan_modes = SUPPORTED_FAN_MODES
     _attr_target_temperature_step = 1
-    _enable_turn_on_off_backwards_compatibility = False
 
     def __init__(
         self,
@@ -181,7 +180,7 @@ class SwitchBeeClimateEntity(SwitchBeeDeviceEntity[SwitchBeeThermostat], Climate
             await self.coordinator.api.set_state(self._device.id, state)
         except (SwitchBeeError, SwitchBeeDeviceOfflineError) as exp:
             raise HomeAssistantError(
-                f"Failed to set {self.name} state {state}, error: {str(exp)}"
+                f"Failed to set {self.name} state {state}, error: {exp!s}"
             ) from exp
 
         await self.coordinator.async_refresh()

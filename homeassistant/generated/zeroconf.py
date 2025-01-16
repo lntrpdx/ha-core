@@ -92,6 +92,10 @@ HOMEKIT = {
         "always_discover": True,
         "domain": "lifx",
     },
+    "LIFX Colour": {
+        "always_discover": True,
+        "domain": "lifx",
+    },
     "LIFX DLCOL": {
         "always_discover": True,
         "domain": "lifx",
@@ -140,6 +144,10 @@ HOMEKIT = {
         "always_discover": True,
         "domain": "lifx",
     },
+    "LIFX Permanent Outdoor": {
+        "always_discover": True,
+        "domain": "lifx",
+    },
     "LIFX Pls": {
         "always_discover": True,
         "domain": "lifx",
@@ -161,6 +169,10 @@ HOMEKIT = {
         "domain": "lifx",
     },
     "LIFX Tile": {
+        "always_discover": True,
+        "domain": "lifx",
+    },
+    "LIFX Tube": {
         "always_discover": True,
         "domain": "lifx",
     },
@@ -267,6 +279,11 @@ HOMEKIT = {
 }
 
 ZEROCONF = {
+    "_PowerView-G3._tcp.local.": [
+        {
+            "domain": "hunterdouglas_powerview",
+        },
+    ],
     "_Volumio._tcp.local.": [
         {
             "domain": "volumio",
@@ -275,6 +292,11 @@ ZEROCONF = {
     "_aicu-http._tcp.local.": [
         {
             "domain": "romy",
+        },
+    ],
+    "_airgradient._tcp.local.": [
+        {
+            "domain": "airgradient",
         },
     ],
     "_airplay._tcp.local.": [
@@ -399,9 +421,20 @@ ZEROCONF = {
             "domain": "apple_tv",
         },
     ],
+    "_czc._tcp.local.": [
+        {
+            "domain": "zha",
+            "name": "czc*",
+        },
+    ],
     "_daap._tcp.local.": [
         {
             "domain": "forked_daapd",
+        },
+    ],
+    "_deako._tcp.local.": [
+        {
+            "domain": "deako",
         },
     ],
     "_devialet-http._tcp.local.": [
@@ -504,6 +537,14 @@ ZEROCONF = {
             "name": "bosch shc*",
         },
         {
+            "domain": "eheimdigital",
+            "name": "eheimdigital._http._tcp.local.",
+        },
+        {
+            "domain": "lektrico",
+            "name": "lektrico*",
+        },
+        {
             "domain": "loqed",
             "name": "loqed*",
         },
@@ -516,6 +557,14 @@ ZEROCONF = {
             "properties": {
                 "manufacturer": "nettigo",
             },
+        },
+        {
+            "domain": "peblar",
+            "name": "pblr-*",
+        },
+        {
+            "domain": "powerfox",
+            "name": "powerfox*",
         },
         {
             "domain": "pure_energie",
@@ -532,6 +581,10 @@ ZEROCONF = {
         {
             "domain": "shelly",
             "name": "shelly*",
+        },
+        {
+            "domain": "slide_local",
+            "name": "slide*",
         },
         {
             "domain": "synology_dsm",
@@ -578,12 +631,23 @@ ZEROCONF = {
             "name": "gateway*",
         },
     ],
+    "_linkplay._tcp.local.": [
+        {
+            "domain": "linkplay",
+        },
+    ],
     "_lookin._tcp.local.": [
         {
             "domain": "lookin",
         },
     ],
     "_lutron._tcp.local.": [
+        {
+            "domain": "lutron_caseta",
+            "properties": {
+                "SYSTYPE": "hwqs*",
+            },
+        },
         {
             "domain": "lutron_caseta",
             "properties": {
@@ -603,7 +667,17 @@ ZEROCONF = {
             },
         },
     ],
+    "_mass._tcp.local.": [
+        {
+            "domain": "music_assistant",
+        },
+    ],
     "_matter._tcp.local.": [
+        {
+            "domain": "matter",
+        },
+    ],
+    "_matterc._udp.local.": [
         {
             "domain": "matter",
         },
@@ -630,6 +704,11 @@ ZEROCONF = {
             "name": "yeelink-*",
         },
     ],
+    "_musc._tcp.local.": [
+        {
+            "domain": "bluesound",
+        },
+    ],
     "_nanoleafapi._tcp.local.": [
         {
             "domain": "nanoleaf",
@@ -650,6 +729,11 @@ ZEROCONF = {
             "domain": "octoprint",
         },
     ],
+    "_owserver._tcp.local.": [
+        {
+            "domain": "onewire",
+        },
+    ],
     "_plexmediasvr._tcp.local.": [
         {
             "domain": "plex",
@@ -658,11 +742,6 @@ ZEROCONF = {
     "_plugwise._tcp.local.": [
         {
             "domain": "plugwise",
-        },
-    ],
-    "_powerview-g3._tcp.local.": [
-        {
-            "domain": "hunterdouglas_powerview",
         },
     ],
     "_powerview._tcp.local.": [
@@ -701,6 +780,11 @@ ZEROCONF = {
             },
         },
     ],
+    "_rio._tcp.local.": [
+        {
+            "domain": "russound_rio",
+        },
+    ],
     "_sideplay._tcp.local.": [
         {
             "domain": "ecobee",
@@ -722,8 +806,16 @@ ZEROCONF = {
     ],
     "_slzb-06._tcp.local.": [
         {
+            "domain": "smlight",
+        },
+        {
             "domain": "zha",
             "name": "slzb-06*",
+        },
+    ],
+    "_smoip._tcp.local.": [
+        {
+            "domain": "cambridge_audio",
         },
     ],
     "_sonos._tcp.local.": [
@@ -753,6 +845,11 @@ ZEROCONF = {
         {
             "domain": "smappee",
             "name": "smappee50*",
+        },
+    ],
+    "_stream-magic._tcp.local.": [
+        {
+            "domain": "cambridge_audio",
         },
     ],
     "_system-bridge._tcp.local.": [
@@ -801,10 +898,22 @@ ZEROCONF = {
             "domain": "kodi",
         },
     ],
+    "_xzg._tcp.local.": [
+        {
+            "domain": "zha",
+            "name": "xzg*",
+        },
+    ],
     "_zigate-zigbee-gateway._tcp.local.": [
         {
             "domain": "zha",
             "name": "*zigate*",
+        },
+    ],
+    "_zigbee-coordinator._tcp.local.": [
+        {
+            "domain": "zha",
+            "name": "*",
         },
     ],
     "_zigstar_gw._tcp.local.": [

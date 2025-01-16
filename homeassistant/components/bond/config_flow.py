@@ -11,12 +11,12 @@ from aiohttp import ClientConnectionError, ClientResponseError
 from bond_async import Bond
 import voluptuous as vol
 
-from homeassistant.components import zeroconf
 from homeassistant.config_entries import ConfigEntryState, ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .const import DOMAIN
 from .utils import BondHub
@@ -97,7 +97,7 @@ class BondConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovered[CONF_NAME] = hub_name
 
     async def async_step_zeroconf(
-        self, discovery_info: zeroconf.ZeroconfServiceInfo
+        self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
         """Handle a flow initialized by zeroconf discovery."""
         name: str = discovery_info.name
@@ -113,7 +113,10 @@ class BondConfigFlow(ConfigFlow, domain=DOMAIN):
             ):
                 updates[CONF_ACCESS_TOKEN] = token
             return self.async_update_reload_and_abort(
-                entry, data={**entry.data, **updates}, reason="already_configured"
+                entry,
+                data={**entry.data, **updates},
+                reason="already_configured",
+                reload_even_if_entry_is_unchanged=False,
             )
 
         self._discovered = {CONF_HOST: host, CONF_NAME: bond_id}

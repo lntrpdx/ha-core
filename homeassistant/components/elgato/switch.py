@@ -9,15 +9,15 @@ from typing import Any
 from elgato import Elgato, ElgatoError
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import ElgatoData, ElgatoDataUpdateCoordinator
+from .coordinator import ElgatoConfigEntry, ElgatoData, ElgatoDataUpdateCoordinator
 from .entity import ElgatoEntity
+
+PARALLEL_UPDATES = 1
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -53,11 +53,11 @@ SWITCHES = [
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: ElgatoConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Elgato switches based on a config entry."""
-    coordinator: ElgatoDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
 
     async_add_entities(
         ElgatoSwitchEntity(

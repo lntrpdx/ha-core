@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 import dataclasses
 import fnmatch
+from functools import partial
 import logging
 import os
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, overload
 
 from serial.tools.list_ports import comports
 from serial.tools.list_ports_common import ListPortInfo
@@ -16,7 +17,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.components import websocket_api
-from homeassistant.components.websocket_api.connection import ActiveConnection
+from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import (
     CALLBACK_TYPE,
@@ -24,9 +25,15 @@ from homeassistant.core import (
     HomeAssistant,
     callback as hass_callback,
 )
-from homeassistant.data_entry_flow import BaseServiceInfo
 from homeassistant.helpers import config_validation as cv, discovery_flow, system_info
 from homeassistant.helpers.debounce import Debouncer
+from homeassistant.helpers.deprecation import (
+    DeprecatedConstant,
+    all_with_deprecated_constants,
+    check_if_deprecated_constant,
+    dir_with_deprecated_constants,
+)
+from homeassistant.helpers.service_info.usb import UsbServiceInfo as _UsbServiceInfo
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import USBMatcher, async_get_usb
 
@@ -39,13 +46,12 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-REQUEST_SCAN_COOLDOWN = 60  # 1 minute cooldown
+REQUEST_SCAN_COOLDOWN = 10  # 10 second cooldown
 
 __all__ = [
+    "USBCallbackMatcher",
     "async_is_plugged_in",
     "async_register_scan_request_callback",
-    "USBCallbackMatcher",
-    "UsbServiceInfo",
 ]
 
 CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
@@ -104,18 +110,14 @@ def async_is_plugged_in(hass: HomeAssistant, matcher: USBCallbackMatcher) -> boo
     )
 
 
-@dataclasses.dataclass(slots=True)
-class UsbServiceInfo(BaseServiceInfo):
-    """Prepared info from usb entries."""
-
-    device: str
-    vid: str
-    pid: str
-    serial_number: str | None
-    manufacturer: str | None
-    description: str | None
+_DEPRECATED_UsbServiceInfo = DeprecatedConstant(
+    _UsbServiceInfo,
+    "homeassistant.helpers.service_info.usb.UsbServiceInfo",
+    "2026.2",
+)
 
 
+@overload
 def human_readable_device_name(
     device: str,
     serial_number: str | None,
@@ -123,11 +125,32 @@ def human_readable_device_name(
     description: str | None,
     vid: str | None,
     pid: str | None,
+) -> str: ...
+
+
+@overload
+def human_readable_device_name(
+    device: str,
+    serial_number: str | None,
+    manufacturer: str | None,
+    description: str | None,
+    vid: int | None,
+    pid: int | None,
+) -> str: ...
+
+
+def human_readable_device_name(
+    device: str,
+    serial_number: str | None,
+    manufacturer: str | None,
+    description: str | None,
+    vid: str | int | None,
+    pid: str | int | None,
 ) -> str:
     """Return a human readable name from USBDevice attributes."""
     device_details = f"{device}, s/n: {serial_number or 'n/a'}"
     manufacturer_details = f" - {manufacturer}" if manufacturer else ""
-    vendor_details = f" - {vid}:{pid}" if vid else ""
+    vendor_details = f" - {vid}:{pid}" if vid is not None else ""
     full_details = f"{device_details}{manufacturer_details}{vendor_details}"
 
     if not description:
@@ -330,7 +353,7 @@ class USBDiscovery:
         if not matched:
             return
 
-        service_info: UsbServiceInfo | None = None
+        service_info: _UsbServiceInfo | None = None
 
         sorted_by_most_targeted = sorted(matched, key=lambda item: -len(item))
         most_matched_fields = len(sorted_by_most_targeted[0])
@@ -342,7 +365,7 @@ class USBDiscovery:
                 break
 
             if service_info is None:
-                service_info = UsbServiceInfo(
+                service_info = _UsbServiceInfo(
                     device=await self.hass.async_add_executor_job(
                         get_serial_by_id, device.device
                     ),
@@ -360,12 +383,35 @@ class USBDiscovery:
                 service_info,
             )
 
-    async def _async_process_ports(self, ports: list[ListPortInfo]) -> None:
+    async def _async_process_ports(self, ports: Sequence[ListPortInfo]) -> None:
         """Process each discovered port."""
-        for port in ports:
-            if port.vid is None and port.pid is None:
-                continue
-            await self._async_process_discovered_usb_device(usb_device_from_port(port))
+        usb_devices = [
+            usb_device_from_port(port)
+            for port in ports
+            if port.vid is not None or port.pid is not None
+        ]
+
+        # CP2102N chips create *two* serial ports on macOS: `/dev/cu.usbserial-` and
+        # `/dev/cu.SLAB_USBtoUART*`. The former does not work and we should ignore them.
+        if sys.platform == "darwin":
+            silabs_serials = {
+                dev.serial_number
+                for dev in usb_devices
+                if dev.device.startswith("/dev/cu.SLAB_USBtoUART")
+            }
+
+            usb_devices = [
+                dev
+                for dev in usb_devices
+                if dev.serial_number not in silabs_serials
+                or (
+                    dev.serial_number in silabs_serials
+                    and dev.device.startswith("/dev/cu.SLAB_USBtoUART")
+                )
+            ]
+
+        for usb_device in usb_devices:
+            await self._async_process_discovered_usb_device(usb_device)
 
     async def _async_scan_serial(self) -> None:
         """Scan serial ports."""
@@ -394,6 +440,7 @@ class USBDiscovery:
                 cooldown=REQUEST_SCAN_COOLDOWN,
                 immediate=True,
                 function=self._async_scan,
+                background=True,
             )
         await self._request_debouncer.async_call()
 
@@ -411,3 +458,11 @@ async def websocket_usb_scan(
     if not usb_discovery.observer_active:
         await usb_discovery.async_request_scan()
     connection.send_result(msg["id"])
+
+
+# These can be removed if no deprecated constant are in this module anymore
+__getattr__ = partial(check_if_deprecated_constant, module_globals=globals())
+__dir__ = partial(
+    dir_with_deprecated_constants, module_globals_keys=[*globals().keys()]
+)
+__all__ = all_with_deprecated_constants(globals())

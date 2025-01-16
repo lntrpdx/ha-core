@@ -12,13 +12,12 @@ from homeassistant.components.switch import (
     SwitchEntity,
     SwitchEntityDescription,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import HoneywellData
+from . import HoneywellConfigEntry, HoneywellData
 from .const import DOMAIN
 
 EMERGENCY_HEAT_KEY = "emergency_heat"
@@ -34,13 +33,13 @@ SWITCH_TYPES: tuple[SwitchEntityDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: HoneywellConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Honeywell switches."""
-    data: HoneywellData = hass.data[DOMAIN][config_entry.entry_id]
+    data = config_entry.runtime_data
     async_add_entities(
-        HoneywellSwitch(hass, config_entry, device, description)
+        HoneywellSwitch(data, device, description)
         for device in data.devices.values()
         if device.raw_ui_data.get("SwitchEmergencyHeatAllowed")
         for description in SWITCH_TYPES
@@ -54,13 +53,12 @@ class HoneywellSwitch(SwitchEntity):
 
     def __init__(
         self,
-        hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        honeywell_data: HoneywellData,
         device: SomeComfortDevice,
         description: SwitchEntityDescription,
     ) -> None:
         """Initialize the switch."""
-        self._data = hass.data[DOMAIN][config_entry.entry_id]
+        self._data = honeywell_data
         self._device = device
         self.entity_description = description
         self._attr_unique_id = f"{device.deviceid}_{description.key}"
@@ -72,13 +70,12 @@ class HoneywellSwitch(SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on if heat mode is enabled."""
-        if self._device.system_mode == "heat":
-            try:
-                await self._device.set_system_mode("emheat")
-            except SomeComfortError as err:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN, translation_key="switch_failed_on"
-                ) from err
+        try:
+            await self._device.set_system_mode("emheat")
+        except SomeComfortError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="switch_failed_on"
+            ) from err
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off if on."""

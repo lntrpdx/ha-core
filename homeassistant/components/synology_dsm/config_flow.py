@@ -18,7 +18,6 @@ from synology_dsm.exceptions import (
 )
 import voluptuous as vol
 
-from homeassistant.components import ssdp, zeroconf
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -34,7 +33,6 @@ from homeassistant.const import (
     CONF_PORT,
     CONF_SCAN_INTERVAL,
     CONF_SSL,
-    CONF_TIMEOUT,
     CONF_USERNAME,
     CONF_VERIFY_SSL,
 )
@@ -42,7 +40,13 @@ from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.typing import DiscoveryInfoType
+from homeassistant.helpers.service_info.ssdp import (
+    ATTR_UPNP_FRIENDLY_NAME,
+    ATTR_UPNP_SERIAL,
+    SsdpServiceInfo,
+)
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+from homeassistant.helpers.typing import DiscoveryInfoType, VolDictType
 from homeassistant.util.network import is_ip_address as is_ip
 
 from .const import (
@@ -80,7 +84,7 @@ def _reauth_schema() -> vol.Schema:
 
 
 def _user_schema_with_defaults(user_input: dict[str, Any]) -> vol.Schema:
-    user_schema = {
+    user_schema: VolDictType = {
         vol.Required(CONF_HOST, default=user_input.get(CONF_HOST, "")): str,
     }
     user_schema.update(_ordered_shared_schema(user_input))
@@ -88,9 +92,7 @@ def _user_schema_with_defaults(user_input: dict[str, Any]) -> vol.Schema:
     return vol.Schema(user_schema)
 
 
-def _ordered_shared_schema(
-    schema_input: dict[str, Any],
-) -> dict[vol.Required | vol.Optional, Any]:
+def _ordered_shared_schema(schema_input: dict[str, Any]) -> VolDictType:
     return {
         vol.Required(CONF_USERNAME, default=schema_input.get(CONF_USERNAME, "")): str,
         vol.Required(CONF_PASSWORD, default=schema_input.get(CONF_PASSWORD, "")): str,
@@ -121,7 +123,7 @@ class SynologyDSMFlowHandler(ConfigFlow, domain=DOMAIN):
         config_entry: ConfigEntry,
     ) -> SynologyDSMOptionsFlowHandler:
         """Get the options flow for this handler."""
-        return SynologyDSMOptionsFlowHandler(config_entry)
+        return SynologyDSMOptionsFlowHandler()
 
     def __init__(self) -> None:
         """Initialize the synology_dsm config flow."""
@@ -141,7 +143,7 @@ class SynologyDSMFlowHandler(ConfigFlow, domain=DOMAIN):
             user_input = {}
 
         description_placeholders = {}
-        data_schema = {}
+        data_schema = None
 
         if step_id == "link":
             user_input.update(self.discovered_conf)
@@ -179,7 +181,9 @@ class SynologyDSMFlowHandler(ConfigFlow, domain=DOMAIN):
                 port = DEFAULT_PORT
 
         session = async_get_clientsession(self.hass, verify_ssl)
-        api = SynologyDSM(session, host, port, username, password, use_ssl, timeout=30)
+        api = SynologyDSM(
+            session, host, port, username, password, use_ssl, timeout=DEFAULT_TIMEOUT
+        )
 
         errors = {}
         try:
@@ -244,7 +248,7 @@ class SynologyDSMFlowHandler(ConfigFlow, domain=DOMAIN):
         return await self.async_validate_input_create_entry(user_input, step_id=step)
 
     async def async_step_zeroconf(
-        self, discovery_info: zeroconf.ZeroconfServiceInfo
+        self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
         """Handle a discovered synology_dsm via zeroconf."""
         discovered_macs = [
@@ -259,13 +263,13 @@ class SynologyDSMFlowHandler(ConfigFlow, domain=DOMAIN):
         return await self._async_from_discovery(host, friendly_name, discovered_macs)
 
     async def async_step_ssdp(
-        self, discovery_info: ssdp.SsdpServiceInfo
+        self, discovery_info: SsdpServiceInfo
     ) -> ConfigFlowResult:
         """Handle a discovered synology_dsm via ssdp."""
         parsed_url = urlparse(discovery_info.ssdp_location)
-        upnp_friendly_name: str = discovery_info.upnp[ssdp.ATTR_UPNP_FRIENDLY_NAME]
+        upnp_friendly_name: str = discovery_info.upnp[ATTR_UPNP_FRIENDLY_NAME]
         friendly_name = upnp_friendly_name.split("(", 1)[0].strip()
-        mac_address = discovery_info.upnp[ssdp.ATTR_UPNP_SERIAL]
+        mac_address = discovery_info.upnp[ATTR_UPNP_SERIAL]
         discovered_macs = [format_synology_mac(mac_address)]
         # Synology NAS can broadcast on multiple IP addresses, since they can be connected to multiple ethernets.
         # The serial of the NAS is actually its MAC address.
@@ -290,7 +294,7 @@ class SynologyDSMFlowHandler(ConfigFlow, domain=DOMAIN):
             and existing_entry.data[CONF_HOST] != host
             and ip(existing_entry.data[CONF_HOST]).version == ip(host).version
         ):
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Update host from '%s' to '%s' for NAS '%s' via discovery",
                 existing_entry.data[CONF_HOST],
                 host,
@@ -327,7 +331,11 @@ class SynologyDSMFlowHandler(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Perform reauth upon an API authentication error."""
         self.reauth_conf = entry_data
-        self.context["title_placeholders"][CONF_HOST] = entry_data[CONF_HOST]
+        placeholders = {
+            **self.context["title_placeholders"],
+            CONF_HOST: entry_data[CONF_HOST],
+        }
+        self.context["title_placeholders"] = placeholders
 
         return await self.async_step_reauth_confirm()
 
@@ -373,10 +381,6 @@ class SynologyDSMFlowHandler(ConfigFlow, domain=DOMAIN):
 class SynologyDSMOptionsFlowHandler(OptionsFlow):
     """Handle a option flow."""
 
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -390,12 +394,6 @@ class SynologyDSMOptionsFlowHandler(OptionsFlow):
                     CONF_SCAN_INTERVAL,
                     default=self.config_entry.options.get(
                         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-                    ),
-                ): cv.positive_int,
-                vol.Required(
-                    CONF_TIMEOUT,
-                    default=self.config_entry.options.get(
-                        CONF_TIMEOUT, DEFAULT_TIMEOUT
                     ),
                 ): cv.positive_int,
                 vol.Required(

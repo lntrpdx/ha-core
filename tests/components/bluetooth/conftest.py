@@ -1,5 +1,6 @@
 """Tests for the bluetooth component."""
 
+from collections.abc import Generator
 from unittest.mock import patch
 
 from bleak_retry_connector import bleak_manager
@@ -7,22 +8,28 @@ from dbus_fast.aio import message_bus
 import habluetooth.util as habluetooth_utils
 import pytest
 
+# pylint: disable-next=no-name-in-module
+from homeassistant.components import bluetooth
+from homeassistant.core import HomeAssistant
 
-@pytest.fixture(name="disable_bluez_manager_socket", autouse=True, scope="session")
+from . import FakeScanner
+
+
+@pytest.fixture(name="disable_bluez_manager_socket", autouse=True, scope="package")
 def disable_bluez_manager_socket():
     """Mock the bluez manager socket."""
     with patch.object(bleak_manager, "get_global_bluez_manager_with_timeout"):
         yield
 
 
-@pytest.fixture(name="disable_dbus_socket", autouse=True, scope="session")
+@pytest.fixture(name="disable_dbus_socket", autouse=True, scope="package")
 def disable_dbus_socket():
     """Mock the dbus message bus to avoid creating a socket."""
     with patch.object(message_bus, "MessageBus"):
         yield
 
 
-@pytest.fixture(name="disable_bluetooth_auto_recovery", autouse=True, scope="session")
+@pytest.fixture(name="disable_bluetooth_auto_recovery", autouse=True, scope="package")
 def disable_bluetooth_auto_recovery():
     """Mock out auto recovery."""
     with patch.object(habluetooth_utils, "recover_adapter"):
@@ -74,7 +81,7 @@ def mock_operating_system_90():
 
 
 @pytest.fixture(name="macos_adapter")
-def macos_adapter():
+def macos_adapter() -> Generator[None]:
     """Fixture that mocks the macos adapter."""
     with (
         patch("bleak.get_platform_scanner_backend_type"),
@@ -109,7 +116,7 @@ def windows_adapter():
 
 
 @pytest.fixture(name="no_adapters")
-def no_adapter_fixture():
+def no_adapter_fixture() -> Generator[None]:
     """Fixture that mocks no adapters on Linux."""
     with (
         patch(
@@ -137,7 +144,7 @@ def no_adapter_fixture():
 
 
 @pytest.fixture(name="one_adapter")
-def one_adapter_fixture():
+def one_adapter_fixture() -> Generator[None]:
     """Fixture that mocks one adapter on Linux."""
     with (
         patch(
@@ -176,7 +183,7 @@ def one_adapter_fixture():
 
 
 @pytest.fixture(name="two_adapters")
-def two_adapters_fixture():
+def two_adapters_fixture() -> Generator[None]:
     """Fixture that mocks two adapters on Linux."""
     with (
         patch(
@@ -212,6 +219,45 @@ def two_adapters_fixture():
                     "product_id": "aa01",
                     "vendor_id": "cc01",
                     "connection_slots": 2,
+                },
+            },
+        ),
+    ):
+        yield
+
+
+@pytest.fixture(name="crashed_adapter")
+def crashed_adapter_fixture():
+    """Fixture that mocks one crashed adapter on Linux."""
+    with (
+        patch(
+            "homeassistant.components.bluetooth.platform.system",
+            return_value="Linux",
+        ),
+        patch(
+            "habluetooth.scanner.platform.system",
+            return_value="Linux",
+        ),
+        patch(
+            "bluetooth_adapters.systems.platform.system",
+            return_value="Linux",
+        ),
+        patch("habluetooth.scanner.SYSTEM", "Linux"),
+        patch(
+            "bluetooth_adapters.systems.linux.LinuxAdapters.refresh",
+        ),
+        patch(
+            "bluetooth_adapters.systems.linux.LinuxAdapters.adapters",
+            {
+                "hci0": {
+                    "address": "00:00:00:00:00:00",
+                    "hw_version": "usb:v1D6Bp0246d053F",
+                    "passive_scan": True,
+                    "sw_version": "homeassistant",
+                    "manufacturer": None,
+                    "product": None,
+                    "product_id": None,
+                    "vendor_id": None,
                 },
             },
         ),
@@ -264,3 +310,23 @@ def disable_new_discovery_flows_fixture():
         "homeassistant.components.bluetooth.manager.discovery_flow.async_create_flow"
     ) as mock_create_flow:
         yield mock_create_flow
+
+
+@pytest.fixture
+def register_hci0_scanner(hass: HomeAssistant) -> Generator[None]:
+    """Register an hci0 scanner."""
+    hci0_scanner = FakeScanner("hci0", "hci0")
+    cancel = bluetooth.async_register_scanner(hass, hci0_scanner)
+    yield
+    cancel()
+    bluetooth.async_remove_scanner(hass, hci0_scanner.source)
+
+
+@pytest.fixture
+def register_hci1_scanner(hass: HomeAssistant) -> Generator[None]:
+    """Register an hci1 scanner."""
+    hci1_scanner = FakeScanner("hci1", "hci1")
+    cancel = bluetooth.async_register_scanner(hass, hci1_scanner)
+    yield
+    cancel()
+    bluetooth.async_remove_scanner(hass, hci1_scanner.source)

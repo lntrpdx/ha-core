@@ -18,6 +18,7 @@ from homeassistant.components import (
     light,
     media_player,
     number,
+    remote,
     timer,
     vacuum,
     valve,
@@ -25,30 +26,24 @@ from homeassistant.components import (
 )
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntityFeature,
+    AlarmControlPanelState,
     CodeFormat,
 )
 from homeassistant.components.climate import HVACMode
+from homeassistant.components.lock import LockState
 from homeassistant.const import (
     ATTR_CODE_FORMAT,
     ATTR_SUPPORTED_FEATURES,
     ATTR_TEMPERATURE,
     ATTR_UNIT_OF_MEASUREMENT,
     PERCENTAGE,
-    STATE_ALARM_ARMED_AWAY,
-    STATE_ALARM_ARMED_CUSTOM_BYPASS,
-    STATE_ALARM_ARMED_HOME,
-    STATE_ALARM_ARMED_NIGHT,
     STATE_IDLE,
-    STATE_LOCKED,
-    STATE_LOCKING,
     STATE_OFF,
     STATE_ON,
     STATE_PAUSED,
     STATE_PLAYING,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
-    STATE_UNLOCKED,
-    STATE_UNLOCKING,
     UnitOfLength,
     UnitOfMass,
     UnitOfTemperature,
@@ -260,7 +255,7 @@ class AlexaCapability:
 
         return result
 
-    def serialize_properties(self) -> Generator[dict[str, Any], None, None]:
+    def serialize_properties(self) -> Generator[dict[str, Any]]:
         """Return properties serialized for an API response."""
         for prop in self.properties_supported():
             prop_name = prop["name"]
@@ -268,7 +263,7 @@ class AlexaCapability:
                 prop_value = self.get_property(prop_name)
             except UnsupportedProperty:
                 raise
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 _LOGGER.exception(
                     "Unexpected error getting %s.%s property from %s",
                     self.name(),
@@ -300,6 +295,10 @@ class Alexa(AlexaCapability):
     The API suggests you should explicitly include this interface.
 
     https://developer.amazon.com/docs/device-apis/alexa-interface.html
+
+    To compare current supported locales in Home Assistant
+    with Alexa supported locales, run the following script:
+    python -m script.alexa_locales
     """
 
     supported_locales = {
@@ -318,6 +317,7 @@ class Alexa(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -404,6 +404,7 @@ class AlexaPowerController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -434,8 +435,10 @@ class AlexaPowerController(AlexaCapability):
             is_on = self.entity.state == fan.STATE_ON
         elif self.entity.domain == humidifier.DOMAIN:
             is_on = self.entity.state == humidifier.STATE_ON
+        elif self.entity.domain == remote.DOMAIN:
+            is_on = self.entity.state not in (STATE_OFF, STATE_UNKNOWN)
         elif self.entity.domain == vacuum.DOMAIN:
-            is_on = self.entity.state == vacuum.STATE_CLEANING
+            is_on = self.entity.state == vacuum.VacuumActivity.CLEANING
         elif self.entity.domain == timer.DOMAIN:
             is_on = self.entity.state != STATE_IDLE
         elif self.entity.domain == water_heater.DOMAIN:
@@ -468,6 +471,7 @@ class AlexaLockController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -493,10 +497,10 @@ class AlexaLockController(AlexaCapability):
             raise UnsupportedProperty(name)
 
         # If its unlocking its still locked and not unlocked yet
-        if self.entity.state in (STATE_UNLOCKING, STATE_LOCKED):
+        if self.entity.state in (LockState.UNLOCKING, LockState.LOCKED):
             return "LOCKED"
         # If its locking its still unlocked and not locked yet
-        if self.entity.state in (STATE_LOCKING, STATE_UNLOCKED):
+        if self.entity.state in (LockState.LOCKING, LockState.UNLOCKED):
             return "UNLOCKED"
         return "JAMMED"
 
@@ -522,6 +526,7 @@ class AlexaSceneController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -561,6 +566,7 @@ class AlexaBrightnessController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -610,6 +616,7 @@ class AlexaColorController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -668,6 +675,7 @@ class AlexaColorTemperatureController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -714,6 +722,7 @@ class AlexaSpeaker(AlexaCapability):
         "fr-FR",  # Not documented as of 2021-12-04, see PR #60489
         "it-IT",
         "ja-JP",
+        "nl-NL",
     }
 
     def name(self) -> str:
@@ -771,6 +780,7 @@ class AlexaStepSpeaker(AlexaCapability):
         "es-ES",
         "fr-FR",  # Not documented as of 2021-12-04, see PR #60489
         "it-IT",
+        "nl-NL",
     }
 
     def name(self) -> str:
@@ -800,6 +810,7 @@ class AlexaPlaybackController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -815,13 +826,19 @@ class AlexaPlaybackController(AlexaCapability):
         """
         supported_features = self.entity.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
 
-        operations = {
-            media_player.MediaPlayerEntityFeature.NEXT_TRACK: "Next",
-            media_player.MediaPlayerEntityFeature.PAUSE: "Pause",
-            media_player.MediaPlayerEntityFeature.PLAY: "Play",
-            media_player.MediaPlayerEntityFeature.PREVIOUS_TRACK: "Previous",
-            media_player.MediaPlayerEntityFeature.STOP: "Stop",
-        }
+        operations: dict[
+            cover.CoverEntityFeature | media_player.MediaPlayerEntityFeature, str
+        ]
+        if self.entity.domain == cover.DOMAIN:
+            operations = {cover.CoverEntityFeature.STOP: "Stop"}
+        else:
+            operations = {
+                media_player.MediaPlayerEntityFeature.NEXT_TRACK: "Next",
+                media_player.MediaPlayerEntityFeature.PAUSE: "Pause",
+                media_player.MediaPlayerEntityFeature.PLAY: "Play",
+                media_player.MediaPlayerEntityFeature.PREVIOUS_TRACK: "Previous",
+                media_player.MediaPlayerEntityFeature.STOP: "Stop",
+            }
 
         return [
             value
@@ -852,6 +869,7 @@ class AlexaInputController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -1097,6 +1115,7 @@ class AlexaThermostatController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -1238,6 +1257,7 @@ class AlexaPowerLevelController(AlexaCapability):
         "fr-CA",
         "fr-FR",
         "it-IT",
+        "nl-NL",
         "ja-JP",
     }
 
@@ -1313,13 +1333,13 @@ class AlexaSecurityPanelController(AlexaCapability):
             raise UnsupportedProperty(name)
 
         arm_state = self.entity.state
-        if arm_state == STATE_ALARM_ARMED_HOME:
+        if arm_state == AlarmControlPanelState.ARMED_HOME:
             return "ARMED_STAY"
-        if arm_state == STATE_ALARM_ARMED_AWAY:
+        if arm_state == AlarmControlPanelState.ARMED_AWAY:
             return "ARMED_AWAY"
-        if arm_state == STATE_ALARM_ARMED_NIGHT:
+        if arm_state == AlarmControlPanelState.ARMED_NIGHT:
             return "ARMED_NIGHT"
-        if arm_state == STATE_ALARM_ARMED_CUSTOM_BYPASS:
+        if arm_state == AlarmControlPanelState.ARMED_CUSTOM_BYPASS:
             return "ARMED_STAY"
         return "DISARMED"
 
@@ -1430,6 +1450,12 @@ class AlexaModeController(AlexaCapability):
             )
             if mode in modes:
                 return f"{humidifier.ATTR_MODE}.{mode}"
+
+        # Remote Activity
+        if self.instance == f"{remote.DOMAIN}.{remote.ATTR_ACTIVITY}":
+            activity = self.entity.attributes.get(remote.ATTR_CURRENT_ACTIVITY, None)
+            if activity in self.entity.attributes.get(remote.ATTR_ACTIVITY_LIST, []):
+                return f"{remote.ATTR_ACTIVITY}.{activity}"
 
         # Water heater operation mode
         if self.instance == f"{water_heater.DOMAIN}.{water_heater.ATTR_OPERATION_MODE}":
@@ -1542,6 +1568,24 @@ class AlexaModeController(AlexaCapability):
                 self._resource.add_mode(
                     f"{water_heater.ATTR_OPERATION_MODE}.{PRESET_MODE_NA}",
                     [PRESET_MODE_NA],
+                )
+            return self._resource.serialize_capability_resources()
+
+        # Remote Resource
+        if self.instance == f"{remote.DOMAIN}.{remote.ATTR_ACTIVITY}":
+            # Use the mode controller for a remote because the input controller
+            # only allows a preset of names as an input.
+            self._resource = AlexaModeResource([AlexaGlobalCatalog.SETTING_MODE], False)
+            activities = self.entity.attributes.get(remote.ATTR_ACTIVITY_LIST) or []
+            for activity in activities:
+                self._resource.add_mode(
+                    f"{remote.ATTR_ACTIVITY}.{activity}", [activity]
+                )
+            # Remotes with a single activity completely break Alexa discovery, add a
+            # fake activity to the mode controller (see issue #53832).
+            if len(activities) == 1:
+                self._resource.add_mode(
+                    f"{remote.ATTR_ACTIVITY}.{PRESET_MODE_NA}", [PRESET_MODE_NA]
                 )
             return self._resource.serialize_capability_resources()
 
@@ -1692,6 +1736,7 @@ class AlexaRangeController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -2035,6 +2080,7 @@ class AlexaToggleController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -2181,6 +2227,7 @@ class AlexaPlaybackStateReporter(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -2236,6 +2283,7 @@ class AlexaSeekController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -2329,6 +2377,7 @@ class AlexaEqualizerController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
@@ -2439,6 +2488,7 @@ class AlexaCameraStreamController(AlexaCapability):
         "hi-IN",
         "it-IT",
         "ja-JP",
+        "nl-NL",
         "pt-BR",
     }
 
